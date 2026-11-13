@@ -24,5 +24,6 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'com.rmthes:tesseract:5.3.2'
+    // tesseract-android-lib (JitPack: adaptech-cz/Tesseract4Android)
+    implementation 'cz.adaptech.tesseract4android:tesseract4android:4.9.0'
 }
