@@ -2,6 +2,12 @@ plugins {
     id 'com.android.application'
 }
 
+repositories {
+    google()
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+}
+
 android {
     namespace 'com.wilson.hymnbook'
     compileSdk 34
