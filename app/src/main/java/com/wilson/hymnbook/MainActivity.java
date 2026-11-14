@@ -16,6 +16,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
 import androidx.core.app.ActivityCompat;
+import android.util.Log;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -29,7 +30,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_PICK_PHOTO = 1002;
     private static final int PERM_CODE = 5000;
 
-    private TesseractOcr ocr = new TesseractOcr();
+    private TesseractOcr ocr;
     private boolean camGranted;
     private boolean storageGranted;
 
@@ -37,11 +38,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        Button go = findViewById(R.id.go);
         try {
+            ocr = new TesseractOcr();
             ocr.init(this);
         } catch (RuntimeException e) {
+            android.util.Log.e("Hymbook", "OCR engine init failed", e);
             Toast.makeText(this, "OCR engine not available", Toast.LENGTH_LONG).show();
-            throw e;
+            go.setEnabled(false);
         }
         camGranted = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
         storageGranted = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
