@@ -113,15 +113,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void dispatchCamera() {
-        android.content.Intent take = new android.content.Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        File photoFile = new File(getCacheDir(), "hymn_card.jpg");
-        Uri photoUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider",
-                photoFile);
-        take.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
         try {
+            android.content.Intent take = new android.content.Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            File photoFile = new File(getCacheDir(), "hymn_card.jpg");
+            Uri photoUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider",
+                    photoFile);
+            take.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
+            // The camera app runs in another process and needs write access to our
+            // FileProvider URI, otherwise saving the shot fails (and can take the caller
+            // down with a SecurityException). ClipData makes the grant discoverable.
+            take.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            take.setClipData(android.content.ClipData.newRawUri(MediaStore.EXTRA_OUTPUT, photoUri));
             startActivityForResult(take, REQUEST_TAKE_PHOTO);
-        } catch (Exception e) {
-            Toast.makeText(this, "Camera not available", Toast.LENGTH_SHORT).show();
+        } catch (Throwable e) {
+            Log.e("Hymbook", "camera launch failed", e);
+            Toast.makeText(this, "Camera not available: " + e.getMessage(),
+                    Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -166,9 +174,10 @@ public class MainActivity extends AppCompatActivity {
                     "OCR lines: " + cands.size() + "\n" +
                     "CSV -> " + out.getAbsolutePath());
             Toast.makeText(this, "Indexed: " + title + "  ->  " + out.getAbsolutePath(), Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
+        } catch (Throwable e) {
+            // OutOfMemoryError and other Errors must not kill the app either.
             Log.e("Hymbook", "OCR recognize failed", e);
-            Toast.makeText(this, "OCR failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "OCR failed: " + e, Toast.LENGTH_LONG).show();
         }
     }
 
@@ -186,11 +195,36 @@ public class MainActivity extends AppCompatActivity {
         return out;
     }
 
+    /**
+     * Decode with a capped longest side (~2000 px). A 12 MP camera photo is ~48 MB as an
+     * ARGB bitmap, which previously threw OutOfMemoryError (an Error, not caught by the
+     * old `catch (Exception)`) and crashed the app. 2000 px is ample for title OCR.
+     */
     private Bitmap decodeBitmap(Uri src) throws IOException {
         InputStream in = getContentResolver().openInputStream(src);
         if (in == null) throw new IOException("cannot open image");
-        Bitmap b = BitmapFactory.decodeStream(in);
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeStream(in, null, bounds);
         in.close();
-        return b;
+
+        int maxDim = Math.max(bounds.outWidth, bounds.outHeight);
+        int sample = 1;
+        while (maxDim / sample > 2000) sample *= 2;
+
+        InputStream in2 = getContentResolver().openInputStream(src);
+        if (in2 == null) throw new IOException("cannot reopen image");
+        try {
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = sample;
+            Bitmap b = BitmapFactory.decodeStream(in2, null, opts);
+            if (b == null) {
+                throw new IOException("image could not be decoded ("
+                        + bounds.outWidth + "x" + bounds.outHeight + ")");
+            }
+            return b;
+        } finally {
+            in2.close();
+        }
     }
 }
