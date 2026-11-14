@@ -3,11 +3,12 @@
     package="com.wilson.hymnbook"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Only CAMERA is required. The gallery uses ACTION_GET_CONTENT (system picker, no
+         storage permission) and camera photos go through FileProvider, so READ_EXTERNAL_STORAGE
+         / READ_MEDIA_IMAGES are deliberately NOT declared: on Android 13+ requesting
+         READ_EXTERNAL_STORAGE is auto-denied and made the app report "permission required"
+         even after the user granted every dialog shown. -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"
-        android:minSdkVersion="33" />
     <uses-feature android:name="android.hardware.camera" />
     <uses-feature android:name="android.hardware.camera.autofocus" />
 

@@ -31,7 +31,6 @@ public class MainActivity extends AppCompatActivity {
 
     private TesseractOcr ocr;
     private boolean camGranted;
-    private boolean storageGranted;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,7 +49,6 @@ public class MainActivity extends AppCompatActivity {
         final TextView result = findViewById(R.id.result);
 
         camGranted = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
-        storageGranted = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
 
         if (go != null) go.setOnClickListener(v -> ensurePermissions());
 
@@ -79,23 +77,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void ensurePermissions() {
-        if (camGranted && storageGranted) {
+        if (camGranted) {
             chooseImage();
             return;
         }
-        String[] perms = {Manifest.permission.CAMERA, Manifest.permission.READ_EXTERNAL_STORAGE};
-        ActivityCompat.requestPermissions(this, perms, PERM_CODE);
+        // Only CAMERA is required: the gallery uses ACTION_GET_CONTENT (system picker, no
+        // storage permission) and camera photos are written through FileProvider.
+        // READ_EXTERNAL_STORAGE does not apply on Android 13+ (API 33+) and requesting it
+        // made the previous build report "permission required" even after the user had
+        // granted every dialog that was actually shown.
+        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, PERM_CODE);
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == PERM_CODE) {
             camGranted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-            storageGranted = grantResults.length > 1 && grantResults[1] == PackageManager.PERMISSION_GRANTED;
-            if (camGranted && storageGranted) {
+            if (camGranted) {
                 chooseImage();
             } else {
-                Toast.makeText(this, "Camera/gallery permission is required", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Camera permission is required", Toast.LENGTH_SHORT).show();
             }
         }
     }
