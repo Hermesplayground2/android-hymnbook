@@ -56,15 +56,20 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         String[] perms = {Manifest.permission.CAMERA, Manifest.permission.READ_EXTERNAL_STORAGE};
-        ActivityCompat.requestPermissions(this, perms, PERM_CODE, (r, p, g) -> {
-            camGranted = g[0] == PackageManager.PERMISSION_GRANTED;
-            storageGranted = g[1] == PackageManager.PERMISSION_GRANTED;
+        ActivityCompat.requestPermissions(this, perms, PERM_CODE);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == PERM_CODE) {
+            camGranted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            storageGranted = grantResults[1] == PackageManager.PERMISSION_GRANTED;
             if (camGranted && storageGranted) {
                 chooseImage();
             } else {
-                Toast.makeText(MainActivity.this, "Camera/gallery permission is required", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Camera/gallery permission is required", Toast.LENGTH_SHORT).show();
             }
-        });
+        }
     }
 
     private void chooseImage() {
