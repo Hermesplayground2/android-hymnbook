@@ -12,6 +12,18 @@ android {
     namespace 'com.wilson.hymnbook'
     compileSdk 34
 
+    // Fixed debug keystore so every build shares one signing certificate: an update then
+    // installs straight over the previous build instead of failing with
+    // INSTALL_FAILED_UPDATE_INCOMPATIBLE. DEBUG ONLY - never sign a release with this key.
+    signingConfigs {
+        debug {
+            storeFile rootProject.file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     defaultConfig {
         applicationId "com.wilson.hymnbook"
         minSdk 24
