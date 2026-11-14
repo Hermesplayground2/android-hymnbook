@@ -4,7 +4,9 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.Manifest;
 import android.os.Bundle;
+import android.content.pm.PackageManager;
 import android.provider.MediaStore;
 import android.view.View;
 import android.widget.Button;
@@ -13,6 +15,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
+import androidx.core.app.ActivityCompat;
 
 import java.io.File;
 import java.io.FileOutputStream;
