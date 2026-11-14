@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import cz.adaptech.tesseract4android.TessBaseAPI;
+import com.googlecode.tesseract.android.TessBaseAPI;
 
 /**
  * On-device OCR: tesseract-android-lib via JitPack
