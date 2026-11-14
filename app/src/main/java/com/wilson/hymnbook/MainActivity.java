@@ -98,7 +98,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_TAKE_PHOTO && resultCode == RESULT_OK) {
-            handleImage(Uri.fromFile(new File(getCacheDir(), "hymn_card.jpg")));
+            Uri photoUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider",
+                    new File(getCacheDir(), "hymn_card.jpg"));
+            handleImage(photoUri);
         } else if (requestCode == REQUEST_PICK_PHOTO && resultCode == RESULT_OK && data != null) {
             handleImage(data.getData());
         }
