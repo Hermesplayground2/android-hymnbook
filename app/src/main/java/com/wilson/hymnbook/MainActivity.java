@@ -8,7 +8,6 @@ import android.Manifest;
 import android.os.Bundle;
 import android.content.pm.PackageManager;
 import android.provider.MediaStore;
-import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -38,20 +37,45 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Button go = findViewById(R.id.go);
-        try {
-            ocr = new TesseractOcr();
-            ocr.init(this);
-        } catch (RuntimeException e) {
-            android.util.Log.e("Hymbook", "OCR engine init failed", e);
-            Toast.makeText(this, "OCR engine not available", Toast.LENGTH_LONG).show();
-            go.setEnabled(false);
-        }
+
+        // Log any uncaught exception to logcat (tag "Hymbook") before the system handles it,
+        // so a crash is diagnosable without a debugger attached.
+        Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            Log.e("Hymbook", "UNCAUGHT on thread " + t.getName(), e);
+            if (prev != null) prev.uncaughtException(t, e);
+        });
+
+        final Button go = findViewById(R.id.go);
+        final TextView result = findViewById(R.id.result);
+
         camGranted = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
         storageGranted = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
 
-        Button go = findViewById(R.id.go);
-        go.setOnClickListener(v -> ensurePermissions());
+        if (go != null) go.setOnClickListener(v -> ensurePermissions());
+
+        // Loading the 23 MB English model can block for seconds; do it off the main
+        // thread so the UI never freezes (ANR) and a failure can never crash the app.
+        if (result != null) result.setText("Starting OCR engine…");
+        if (go != null) go.setEnabled(false);
+        new Thread(() -> {
+            try {
+                TesseractOcr t = new TesseractOcr();
+                t.init(this);
+                ocr = t;
+                runOnUiThread(() -> {
+                    if (result != null) result.setText("OCR ready.");
+                    if (go != null) go.setEnabled(true);
+                });
+            } catch (Throwable e) {
+                Log.e("Hymbook", "OCR engine init failed", e);
+                String msg = e.getClass().getSimpleName() + ": " + String.valueOf(e.getMessage());
+                runOnUiThread(() -> {
+                    if (result != null) result.setText("OCR engine failed:\n" + msg);
+                    Toast.makeText(this, "OCR unavailable: " + msg, Toast.LENGTH_LONG).show();
+                });
+            }
+        }, "hymbook-ocr-init").start();
     }
 
     private void ensurePermissions() {
@@ -66,8 +90,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == PERM_CODE) {
-            camGranted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
-            storageGranted = grantResults[1] == PackageManager.PERMISSION_GRANTED;
+            camGranted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            storageGranted = grantResults.length > 1 && grantResults[1] == PackageManager.PERMISSION_GRANTED;
             if (camGranted && storageGranted) {
                 chooseImage();
             } else {
@@ -88,11 +112,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void dispatchCamera() {
-        android.content.Intent take = new android.content.Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+        android.content.Intent take = new android.content.Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         File photoFile = new File(getCacheDir(), "hymn_card.jpg");
         Uri photoUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider",
                 photoFile);
-        take.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, photoUri);
+        take.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
         try {
             startActivityForResult(take, REQUEST_TAKE_PHOTO);
         } catch (Exception e) {
@@ -101,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void dispatchGallery() {
-        android.content.Intent pick = new android.content.Intent(android.content.Intent.ACTION_GET_CONTENT);
+        android.content.Intent pick = new android.content.Intent(Intent.ACTION_GET_CONTENT);
         pick.setType("image/*");
         startActivityForResult(pick, REQUEST_PICK_PHOTO);
     }
@@ -119,6 +143,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleImage(Uri src) {
+        if (ocr == null) {
+            Toast.makeText(this, "OCR engine is not ready yet", Toast.LENGTH_SHORT).show();
+            return;
+        }
         try {
             Bitmap b = decodeBitmap(src);
             String text = ocr.recognize(b);
@@ -126,7 +154,9 @@ public class MainActivity extends AppCompatActivity {
             String title = cands.isEmpty() ? "" : cands.get(0);
 
             File imgFile = copyToLocal(src);
-            File out = new File(getExternalFilesDir(null), "hymns_import.csv");
+            File ext = getExternalFilesDir(null);
+            File out = ext == null ? new File(getFilesDir(), "hymns_import.csv")
+                    : new File(ext, "hymns_import.csv");
             HymnbookOcr.Record rec = HymnbookOcr.record(title, imgFile);
             HymnbookOcr.writeCsv(out, rec);
 
@@ -136,12 +166,15 @@ public class MainActivity extends AppCompatActivity {
                     "CSV -> " + out.getAbsolutePath());
             Toast.makeText(this, "Indexed: " + title + "  ->  " + out.getAbsolutePath(), Toast.LENGTH_LONG).show();
         } catch (Exception e) {
+            Log.e("Hymbook", "OCR recognize failed", e);
             Toast.makeText(this, "OCR failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
     private File copyToLocal(Uri src) throws IOException {
-        File out = new File(getExternalFilesDir(null), "hymn_card.jpg");
+        File ext = getExternalFilesDir(null);
+        File out = ext == null ? new File(getFilesDir(), "hymn_card.jpg")
+                : new File(ext, "hymn_card.jpg");
         try (InputStream in = getContentResolver().openInputStream(src);
                 FileOutputStream f = new FileOutputStream(out)) {
             if (in == null) throw new IOException("cannot open " + src);

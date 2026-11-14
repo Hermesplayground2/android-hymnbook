@@ -34,14 +34,22 @@ public class TesseractOcr extends HymnbookOcr {
     public void init(android.content.Context ctx) {
         if (inited) return;
         if (ctx == null) throw new IllegalStateException("TesseractOcr.init(Context) not called");
+        // The library requires <datapath>/tessdata/<lang>.traineddata (it checks that
+        // "<datapath>/tessdata" exists and passes "<datapath>/tessdata" to nativeInitOem).
         File dataDir = new File(ctx.getFilesDir(), "tesseract");
-        File model = new File(dataDir, "eng.traineddata");
-        if (!model.exists()) {
+        File tessdataDir = new File(dataDir, "tessdata");
+        File model = new File(tessdataDir, "eng.traineddata");
+        if (!model.exists() || model.length() < 1_000_000L) {
             copyFromAssets(ctx.getAssets(), "tesseract/eng.traineddata", model);
+        }
+        if (model.length() < 1_000_000L) {
+            throw new IllegalStateException("eng.traineddata missing or truncated (" +
+                    model.getAbsolutePath() + ", " + model.length() + " bytes)");
         }
         if (!api.init(dataDir.getAbsolutePath(), "eng")) {
             api.recycle();
-            throw new IllegalStateException("Tesseract failed to initialize (" + dataDir.getAbsolutePath() + ")");
+            throw new IllegalStateException("Tesseract failed to initialize (" +
+                    tessdataDir.getAbsolutePath() + ")");
         }
         inited = true;
     }
