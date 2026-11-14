@@ -91,7 +91,7 @@ public class MainActivity extends AppCompatActivity {
 
             TextView tv = findViewById(R.id.result);
             tv.setText("Title: " + title + "\n" +
-                    "OCR lines: " + (lines == null ? 0 : lines.size()) + "\n" +
+                    "OCR lines: " + cands.size() + "\n" +
                     "CSV -> " + out.getAbsolutePath());
             Toast.makeText(this, "Indexed: " + title + "  ->  " + out.getAbsolutePath(), Toast.LENGTH_LONG).show();
         } catch (Exception e) {

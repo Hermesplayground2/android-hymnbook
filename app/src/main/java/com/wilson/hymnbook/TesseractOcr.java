@@ -60,7 +60,6 @@ public class TesseractOcr extends HymnbookOcr {
         }
     }
 
-    @Override
     public String recognize(Bitmap b) {
         if (!inited) throw new IllegalStateException("TesseractOcr.init(Context) not called");
         api.setImage(b);
