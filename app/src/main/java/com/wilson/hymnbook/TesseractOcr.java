@@ -1,15 +1,26 @@
 package com.wilson.hymnbook;
 
+import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 
-import com.rmthes.tesseract.TessBaseAPI;
-import com.rmthes.tesseract.TessBaseAPI.PageSegMode;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import cz.adaptech.tesseract4android.TessBaseAPI;
 
 /**
- * On-device OCR: tesseract-run via tesseract-android-lib (`com.rmthes:tesseract:5.3.2`).
+ * On-device OCR: tesseract-android-lib via JitPack
+ * ({@code cz.adaptech.tesseract4android:tesseract4android:4.9.0}).
+ *
  * <p>
- * The native `libtesseract` is resolved from the library AAR's `jni` directory by Gradle; the
- * English model (`eng.traineddata`) is loaded from `assets/tessdata/` (see README).
+ * The native {@code libtesseract} is resolved from the library AAR's {@code jni} directory by
+ * Gradle; the English model ({@code eng.traineddata}) is shipped in the APK's assets and copied
+ * into the app's private files dir on first launch (the library requires the traineddata to be
+ * readable on device storage, not inside the read-only APK). See README for the download.
+ *
  * <p>
  * Reuses the same title-selection + CSV logic as the verified desktop CLI
  * (HymnbookOcr.pickTitle / lines / writeCsv).
@@ -23,9 +34,30 @@ public class TesseractOcr extends HymnbookOcr {
     public void init(android.content.Context ctx) {
         if (inited) return;
         if (ctx == null) throw new IllegalStateException("TesseractOcr.init(Context) not called");
-        api.init(ctx, "eng", TessBaseAPI.OEM_LSTM_ONLY);
-        api.setPageSegMode(PageSegMode.PSM_AUTO);
+        File dataDir = new File(ctx.getFilesDir(), "tesseract");
+        File model = new File(dataDir, "eng.traineddata");
+        if (!model.exists()) {
+            copyFromAssets(ctx.getAssets(), "tesseract/eng.traineddata", model);
+        }
+        if (!api.init(dataDir.getAbsolutePath(), "eng")) {
+            api.recycle();
+            throw new IllegalStateException("Tesseract failed to initialize (" + dataDir.getAbsolutePath() + ")");
+        }
         inited = true;
+    }
+
+    private void copyFromAssets(AssetManager am, String path, File target) {
+        try (InputStream in = am.open(path)) {
+            if (in == null) throw new IllegalStateException("asset not found: " + path);
+            if (!target.getParentFile().exists()) target.getParentFile().mkdirs();
+            try (OutputStream o = new FileOutputStream(target)) {
+                byte[] buf = new byte[8192];
+                int c;
+                while ((c = in.read(buf)) != -1) o.write(buf, 0, c);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("cannot copy " + path + " to " + target, e);
+        }
     }
 
     @Override
@@ -33,7 +65,6 @@ public class TesseractOcr extends HymnbookOcr {
         if (!inited) throw new IllegalStateException("TesseractOcr.init(Context) not called");
         api.setImage(b);
         String t = api.getUTF8Text();
-        api.reset();
         return t == null ? "" : t;
     }
 }
