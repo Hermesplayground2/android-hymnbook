@@ -2,6 +2,7 @@ package com.wilson.hymnbook;
 
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
+import android.util.Log;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -27,13 +28,17 @@ import com.googlecode.tesseract.android.TessBaseAPI;
  */
 public class TesseractOcr extends HymnbookOcr {
 
-    private final TessBaseAPI api = new TessBaseAPI();
+    private static final int INIT_ATTEMPTS = 3;
+    private static final long RETRY_DELAY_MS = 600L;
+
+    private TessBaseAPI api;
     private boolean inited;
 
     /** Call once, from the Activity (onCreate), before recognizing any card. */
     public void init(android.content.Context ctx) {
         if (inited) return;
         if (ctx == null) throw new IllegalStateException("TesseractOcr.init(Context) not called");
+
         // The library requires <datapath>/tessdata/<lang>.traineddata (it checks that
         // "<datapath>/tessdata" exists and passes "<datapath>/tessdata" to nativeInitOem).
         File dataDir = new File(ctx.getFilesDir(), "tesseract");
@@ -46,12 +51,32 @@ public class TesseractOcr extends HymnbookOcr {
             throw new IllegalStateException("eng.traineddata missing or truncated (" +
                     model.getAbsolutePath() + ", " + model.length() + " bytes)");
         }
-        if (!api.init(dataDir.getAbsolutePath(), "eng")) {
-            api.recycle();
-            throw new IllegalStateException("Tesseract failed to initialize (" +
-                    tessdataDir.getAbsolutePath() + ")");
+
+        // Native init occasionally fails on the first attempt (memory pressure / cold start),
+        // so retry with a fresh API instance each time instead of giving up immediately.
+        for (int attempt = 1; attempt <= INIT_ATTEMPTS; attempt++) {
+            TessBaseAPI candidate = new TessBaseAPI();
+            if (candidate.init(dataDir.getAbsolutePath(), "eng")) {
+                api = candidate;
+                inited = true;
+                Log.i("Hymbook", "Tesseract initialized (" + tessdataDir.getAbsolutePath()
+                        + ") on attempt " + attempt);
+                return;
+            }
+            candidate.recycle();
+            Log.w("Hymbook", "Tesseract init attempt " + attempt + "/" + INIT_ATTEMPTS
+                    + " failed for " + tessdataDir.getAbsolutePath());
+            if (attempt < INIT_ATTEMPTS) {
+                try {
+                    Thread.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         }
-        inited = true;
+        throw new IllegalStateException("Tesseract failed to initialize ("
+                + tessdataDir.getAbsolutePath() + ") after " + INIT_ATTEMPTS + " attempts");
     }
 
     private void copyFromAssets(AssetManager am, String path, File target) {
@@ -69,7 +94,7 @@ public class TesseractOcr extends HymnbookOcr {
     }
 
     public String recognize(Bitmap b) {
-        if (!inited) throw new IllegalStateException("TesseractOcr.init(Context) not called");
+        if (!inited || api == null) throw new IllegalStateException("TesseractOcr.init(Context) not called");
         api.setImage(b);
         String t = api.getUTF8Text();
         return t == null ? "" : t;
